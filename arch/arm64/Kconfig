@@ -301,6 +301,13 @@ config ARCH_MSM8940
 	  This enables support for the MSM8940 chipset. If you don't
 	  know what to do here, say N
 
+config PRODUCT_RADITZ
+	bool "RADITZ Product"
+	default n
+	help
+	  Say Y here if RADITZ MSM8940
+	  If unsure, say N.
+
 config ARCH_MSM8953
 	bool "Enable Support for Qualcomm Technologies Inc MSM8953"
 	depends on ARCH_MSM
@@ -348,6 +355,13 @@ config ARCH_MSM8994_V1_TLBI_WA
 	  operations with VA or ASID will not work.
 
 endmenu
+
+config MSM8953_PRODUCT
+	bool "MSM8953 Product"
+	default n
+	help
+	  Say Y here if MSM8953
+	  If unsure, say N.
 
 menu "Bus support"
 
