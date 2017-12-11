@@ -791,6 +791,21 @@ int32_t msm_sensor_driver_probe(void *setting,
 		}
 	}
 
+	if (strlen(slave_info->sensor_name) >= MAX_SENSOR_NAME ||
+		strlen(slave_info->eeprom_name) >= MAX_SENSOR_NAME ||
+		strlen(slave_info->actuator_name) >= MAX_SENSOR_NAME ||
+		strlen(slave_info->ois_name) >= MAX_SENSOR_NAME) {
+		pr_err("failed: name len greater than 32.\n");
+		pr_err("sensor name len:%zu, eeprom name len: %zu.\n",
+			strlen(slave_info->sensor_name),
+			strlen(slave_info->eeprom_name));
+		pr_err("actuator name len: %zu, ois name len:%zu.\n",
+			strlen(slave_info->actuator_name),
+			strlen(slave_info->ois_name));
+		rc = -EINVAL;
+		goto free_slave_info;
+	}
+
 	pr_err("%s camera eeprom_name=%s\n",__func__, slave_info->eeprom_name);//slave_info is from userspace
 	pr_err("%s slave_info->sensor_name =%s\n",__func__, slave_info->sensor_name);//slave_info is from userspace
 
