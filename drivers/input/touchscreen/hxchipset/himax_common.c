@@ -1496,7 +1496,7 @@ void himax_ts_work(struct himax_ts_data *ts)
 	memset(buf, 0x00, sizeof(buf));
 	memset(hw_reset_check, 0x00, sizeof(hw_reset_check));
 	
-	I("New Method for ts_work\n");
+	//I("New Method for ts_work\n");
 	
 	if(himax_touch_get(ts,buf,ts_status))
 		goto err_workqueue_out;

@@ -561,6 +561,10 @@ static void goodix_ts_work_func(struct work_struct *work)
     u8 doze_buf[3] = {0x81, 0x4B};
 #endif
 
+    u8 position_buf[7]= {0x81,0x4c}; 
+    s32 gesture_input_x = 0;
+    s32 gesture_input_y = 0;
+    
     GTP_DEBUG_FUNC();
     ts = container_of(work, struct goodix_ts_data, work);
     if (ts->enter_update)
@@ -614,12 +618,25 @@ static void goodix_ts_work_func(struct work_struct *work)
                 gtp_i2c_write(i2c_connect_client, doze_buf, 3);
             }
             else if (0xCC == doze_buf[2])
-            {
-                GTP_INFO("Double click to light up the screen!");
-                input_report_key(ts->input_dev, KEY_WAKEUP, 1);
-                input_sync(ts->input_dev);
-                input_report_key(ts->input_dev, KEY_WAKEUP, 0);
-                input_sync(ts->input_dev);
+            {			                
+				gtp_i2c_read(i2c_connect_client, position_buf, 7);
+				gesture_input_x = position_buf[3] | ( position_buf[4] << 8 );
+				gesture_input_y = position_buf[5] | ( position_buf[6] << 8 );
+			    GTP_DEBUG("gesture_input_x = %d,gesture_input_y= %d\n",gesture_input_x,gesture_input_y);
+				if( ( (gesture_input_x == 1 || gesture_input_x == 2 || gesture_input_x == 4) ) && gesture_input_y == 0)
+				{
+                   //NOT report the cap-button
+				}
+				else
+				{
+                    GTP_INFO("Double click to light up the screen!");
+	                input_report_key(ts->input_dev, KEY_WAKEUP, 1);
+	                input_sync(ts->input_dev);
+	                input_report_key(ts->input_dev, KEY_WAKEUP, 0);
+	                input_sync(ts->input_dev);
+				}
+				
+				
                 // clear 0x814B
                 doze_buf[2] = 0x00;
                 gtp_i2c_write(i2c_connect_client, doze_buf, 3);

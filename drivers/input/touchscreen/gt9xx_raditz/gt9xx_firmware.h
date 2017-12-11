@@ -1,5 +1,4 @@
-/* 
- *
+/*
  * GOODIX (C) 2014. All rights reserved.
  *
  * WARNING:
@@ -9,6 +8,8 @@
  * Generate date & time: 
  *		2017/08/22, 18:06:40
  */
+
+
 
 
 #ifndef _GT9XX_FIRMWARE_H_

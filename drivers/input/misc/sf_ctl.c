@@ -52,6 +52,13 @@
 #include "sf_ctl.h"
 //#include "../fp_drv/fp_drv.h"
 
+#ifdef CONFIG_HAS_EARLYSUSPEND
+#include <linux/earlysuspend.h>
+#else
+#include <linux/fb.h>
+#include <linux/notifier.h>
+#endif
+
 #define MODULE_NAME "sf_ctl"
 #define xprintk(level, fmt, args...) printk(level MODULE_NAME": "fmt, ##args)
 
@@ -75,7 +82,7 @@
  * There is NO need to modify 'rXXXX_yyyymmdd', it should be updated automatically
  * by the building script (see the 'Driver-revision' section in 'build.sh').
  */
-#define SF_DRV_VERSION "v0.9.1-rXXXX_20161227"
+#define SF_DRV_VERSION "v0.9.2-r1_201711018"
 #define LONGQI_HAL_COMPATIBLE 1	//powerking add for longqi 2017.01.16
 
 struct sf_ctl_device {
@@ -90,6 +97,11 @@ struct sf_ctl_device {
     struct work_struct work_queue;
     struct input_dev* input;
 	struct wake_lock wakelock;
+#ifdef CONFIG_HAS_EARLYSUSPEND
+    struct early_suspend early_suspend;
+#else
+    struct notifier_block notifier;
+#endif
 };
 
 typedef enum {
@@ -373,6 +385,76 @@ static const struct file_operations proc_file_ops = {
 
 // add for fingerprint check list end
 
+#ifdef CONFIG_HAS_EARLYSUSPEND
+static void sunwave_early_suspend(struct early_suspend *handler)
+{
+    char *screen[2] = { "SCREEN_STATUS=OFF", NULL };
+    //sunwave_sensor_t* sunwave = container_of(handler, sunwave_sensor_t, early_suspend);
+    struct sf_ctl_device *sf_ctl_dev = container_of(handler, struct sf_ctl_device, miscdev);
+    // sw_info("%s enter.\n", __func__);
+    kobject_uevent_env(&sf_ctl_dev->miscdev.this_device->kobj, KOBJ_CHANGE, screen);
+    //kobject_uevent_env(&sunwave->spi->dev.kobj, KOBJ_CHANGE, screen);
+    // sw_info("%s leave.\n", __func__);
+}
+static void sunwave_late_resume(struct early_suspend *handler)
+{
+    char *screen[2] = { "SCREEN_STATUS=ON", NULL };
+    //   sunwave_sensor_t* sunwave = container_of(handler, sunwave_sensor_t, early_suspend);
+    struct sf_ctl_device *sf_ctl_dev = container_of(handler, struct sf_ctl_device, miscdev);
+    //  sw_info("%s enter.\n", __func__);
+    kobject_uevent_env(&sf_ctl_dev->miscdev.this_device->kobj, KOBJ_CHANGE, screen);
+    // kobject_uevent_env(&sunwave->spi->dev.kobj, KOBJ_CHANGE, screen);
+    //   sw_info("%s leave.\n", __func__);
+}
+
+#else //SF_CFG_HAS_EARLYSUSPEND
+
+static int sunwave_fb_notifier_callback(struct notifier_block *self,
+                                        unsigned long event, void *data)
+{
+    static char screen_status[64] = {'\0'};
+    char *screen_env[2] = { screen_status, NULL };
+    struct sf_ctl_device *sf_ctl_dev;
+    // sunwave_sensor_t* sunwave;
+    struct fb_event *evdata = data;
+    unsigned int blank;
+    int retval = 0;
+    //sw_info("%s enter.\n", __func__);
+
+    if (event != FB_EVENT_BLANK /* FB_EARLY_EVENT_BLANK */) {
+        return 0;
+    }
+
+    //  sunwave = container_of(self, sunwave_sensor_t, notifier);
+    sf_ctl_dev = container_of(self, struct sf_ctl_device, notifier);
+    blank = *(int *)evdata->data;
+    //sw_info("%s enter, blank=0x%x\n", __func__, blank);
+
+    switch (blank) {
+        case FB_BLANK_UNBLANK:
+            //sw_info("%s: lcd on notify\n", __func__);
+            sprintf(screen_status, "SCREEN_STATUS=%s", "ON");
+            //kobject_uevent_env(&sunwave->spi->dev.kobj, KOBJ_CHANGE, screen_env);
+            kobject_uevent_env(&sf_ctl_dev->miscdev.this_device->kobj, KOBJ_CHANGE, screen_env);
+            break;
+
+        case FB_BLANK_POWERDOWN:
+            //sw_info("%s: lcd off notify\n", __func__);
+            sprintf(screen_status, "SCREEN_STATUS=%s", "OFF");
+            //kobject_uevent_env(&sunwave->spi->dev.kobj, KOBJ_CHANGE, screen_env);
+            kobject_uevent_env(&sf_ctl_dev->miscdev.this_device->kobj, KOBJ_CHANGE, screen_env);
+            break;
+
+        default:
+            //sw_info("%s: other notifier, ignore\n", __func__);
+            break;
+    }
+
+    //sw_info("%s %s leave.\n", screen_status, __func__);
+    return retval;
+}
+#endif //SF_CFG_HAS_EARLYSUSPEND
+
 ////////////////////////////////////////////////////////////////////////////////
 // struct file_operations fields.
 
@@ -389,12 +471,30 @@ static long sf_ctl_ioctl(struct file* filp, unsigned int cmd, unsigned long arg)
         case SF_IOC_INIT_DRIVER: {
             xprintk(KERN_INFO, "SF_IOC_INIT_DRIVER.\n");
             sf_ctl_init_gpio();
+#ifdef CONFIG_HAS_EARLYSUSPEND
+    //sw_info("%s: register_early_suspend\n", __func__);
+    sf_ctl_dev->early_suspend.level = (EARLY_SUSPEND_LEVEL_DISABLE_FB - 1);
+    sf_ctl_dev->early_suspend.suspend = sunwave_early_suspend;
+    sf_ctl_dev->early_suspend.resume = sunwave_late_resume;
+    register_early_suspend(&sf_ctl_dev->early_suspend);
+#else
+    //sw_info("%s: fb_register_client\n", __func__);
+    sf_ctl_dev->notifier.notifier_call = sunwave_fb_notifier_callback;
+    fb_register_client(&sf_ctl_dev->notifier);
+#endif
             break;
         }
 
         case SF_IOC_DEINIT_DRIVER: {
             xprintk(KERN_INFO, "SF_IOC_DEINIT_DRIVER.\n");
             sf_ctl_free_gpio();
+#ifdef CONFIG_HAS_EARLYSUSPEND
+    //sw_info("%s: register_early_suspend\n", __func__);
+    unregister_early_suspend(&sf_ctl_dev->early_suspend);
+#else
+    //sw_info("%s: fb_register_client\n", __func__);
+    fb_unregister_client(&sf_ctl_dev->notifier);
+#endif
             //sf_spi_platform_free();
             break;
         }
